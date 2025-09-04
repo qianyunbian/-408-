@@ -1,0 +1,222 @@
+{
+  "floating_button": {
+    "size": 66,
+    "idle_opacity": 0.6,
+    "active_opacity": 1.0,
+    "snap_margin": 0,
+    "style": {
+      "background": "qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #4f7cff, stop:1 #6ce0ff)",
+      "color": "white",
+      "font_size": 20,
+      "font_weight": 700
+    }
+  },
+  "action_panel": {
+    "width": 300,
+    "height": 375,
+    "columns": 4,
+    "background_color": "rgba(240, 240, 240, 0.8)"
+  },
+  "action_buttons": {
+    "size": 66,
+    "spacing": 0,
+    "style": {
+      "background_color": "#fff",
+      "border": "1px solid #ddd",
+      "border_radius": 8,
+      "font_size": 12,
+      "color": "#333",
+      "hover_background_color": "#f0f8ff",
+      "hover_border_color": "#4f7cff",
+      "pressed_background_color": "#e0f0ff"
+    }
+  },
+  "actions": [
+    {
+      "name": "截图OCR",
+      "type": "placeholder",
+      "command": "截图OCR"
+    },
+    {
+      "name": "翻译",
+      "type": "placeholder",
+      "command": "翻译"
+    },
+    {
+      "name": "卸载软件",
+      "type": "command",
+      "command": "control",
+      "args": [
+        "appwiz.cpl"
+      ]
+    },
+    {
+      "name": "更多功能",
+      "type": "panel",
+      "actions": [
+        {
+          "name": "截图OCR",
+          "type": "placeholder",
+          "command": "截图OCR"
+        },
+        {
+          "name": "翻译",
+          "type": "placeholder",
+          "command": "翻译"
+        },
+        {
+          "name": "卸载软件",
+          "type": "command",
+          "command": "control",
+          "args": [
+            "appwiz.cpl"
+          ]
+        },
+        {
+          "name": "更多功能",
+          "type": "panel",
+          "actions": [
+            {
+              "name": "画图",
+              "type": "program",
+              "command": "mspaint.exe"
+            },
+            {
+              "name": "写字板",
+              "type": "program",
+              "command": "write.exe"
+            },
+            {
+              "name": "子菜单",
+              "type": "panel",
+              "actions": [
+                {
+                  "name": "子功能",
+                  "type": "placeholder",
+                  "command": "子功能"
+                }
+              ]
+            },
+            {
+              "name": "模拟按键",
+              "type": "key",
+              "command": "666"
+            },
+            {
+              "name": "模拟按键",
+              "type": "key",
+              "command": "0"
+            },
+            {
+              "name": "打开网址",
+              "type": "url",
+              "command": "1"
+            }
+          ]
+        },
+        {
+          "name": "括号发送",
+          "type": "send_clipboard_with_parentheses"
+        },
+        {
+          "name": "复制粘贴序列",
+          "type": "key",
+          "command": "ctrl+c, wait(500), ctrl+v"
+        },
+        {
+          "name": "刷新页面",
+          "type": "key",
+          "command": "f5, wait(2000)"
+        },
+        {
+          "name": "模拟按键",
+          "type": "key",
+          "command": "\"123\""
+        },
+        {
+          "name": "模拟按键",
+          "type": "key",
+          "command": "\"123\""
+        },
+        {
+          "name": "模拟按键",
+          "type": "key",
+          "command": "alt+tab"
+        },
+        {
+          "name": "模拟按键",
+          "type": "key",
+          "command": "123"
+        },
+        {
+          "name": "模拟按键",
+          "type": "key",
+          "command": "123"
+        },
+        {
+          "name": "模拟按键",
+          "type": "key",
+          "command": "1"
+        },
+        {
+          "name": "模拟按键",
+          "type": "key",
+          "command": "\"123\""
+        }
+      ]
+    },
+    {
+      "name": "括号发送",
+      "type": "send_clipboard_with_parentheses"
+    },
+    {
+      "name": "复制粘贴序列",
+      "type": "key",
+      "command": "ctrl+c, wait(500), ctrl+v"
+    },
+    {
+      "name": "刷新页面",
+      "type": "key",
+      "command": "f5, wait(2000)"
+    },
+    {
+      "name": "模拟按键",
+      "type": "key",
+      "command": "\"123\""
+    },
+    {
+      "name": "模拟按键",
+      "type": "key",
+      "command": "\"123\""
+    },
+    {
+      "name": "模拟按键",
+      "type": "key",
+      "command": "alt+tab"
+    },
+    {
+      "name": "模拟按键",
+      "type": "key",
+      "command": "123"
+    },
+    {
+      "name": "模拟按键",
+      "type": "key",
+      "command": "123"
+    },
+    {
+      "name": "1",
+      "type": "panel",
+      "actions": [
+        {
+          "name": "3",
+          "type": "panel",
+          "actions": []
+        }
+      ]
+    }
+  ],
+  "open_panels": [
+    "main_panel"
+  ]
+}
