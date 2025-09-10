@@ -58,9 +58,10 @@ from PySide6.QtWidgets import (
     QSystemTrayIcon, QMessageBox, QGridLayout, QLabel, QVBoxLayout,
     QInputDialog
 )
+from PySide6.QtCore import QMetaObject, Qt
+from PySide6.QtCore import Slot
 
 CONFIG = {}
-
 
 class DraggableButton(QPushButton):
     """可拖动的按钮"""
@@ -197,116 +198,6 @@ class ActionPanel(QWidget):
         super().mouseReleaseEvent(e)
 
 
-
-
-
-class QtHotkeyManager:
-    """使用Qt快捷键实现的热键管理器（仅在应用有焦点时有效）"""
-    def __init__(self, app):
-        self.app = app
-        self.shortcut = None
-        self.registered = False
-        
-    def register_hotkey(self):
-        """注册Qt快捷键"""
-        try:
-            # 创建快捷键 Ctrl+Alt+Q
-            # 使用 QApplication.instance() 确保获取当前应用实例
-            app_instance = QApplication.instance()
-            if app_instance:
-                active_window = app_instance.activeWindow()
-                if not active_window:
-                    # 如果没有活动窗口，使用任意顶级窗口
-                    top_level_widgets = app_instance.topLevelWidgets()
-                    if top_level_widgets:
-                        active_window = top_level_widgets[0]
-                
-                self.shortcut = QShortcut(QKeySequence("Ctrl+Alt+Q"), active_window)
-                self.shortcut.activated.connect(self._toggle_panel)
-                self.registered = True
-                print("✅ Qt快捷键注册成功: Ctrl+Alt+Q")
-                return True
-            else:
-                print("❌ 无法获取 QApplication 实例")
-                return False
-        except Exception as e:
-            print(f"❌ Qt快捷键注册失败: {e}")
-            return False
-    
-    def unregister_hotkey(self):
-        """注销Qt快捷键"""
-        if self.registered and self.shortcut:
-            try:
-                self.shortcut.setEnabled(False)
-                self.registered = False
-                print("Qt快捷键已注销")
-            except Exception as e:
-                print(f"注销Qt快捷键失败: {e}")
-    
-    def _toggle_panel(self):
-        """切换面板显示状态"""
-        # 查找FloatingButton实例
-        floating_buttons = [w for w in QApplication.topLevelWidgets() if isinstance(w, FloatingButton)]
-        if floating_buttons:
-            # 获取第一个FloatingButton实例并调用toggle_panel方法
-            fb = floating_buttons[0]
-            print(f"通过QtHotkey调用 toggle_panel，FloatingButton实例: {fb}")
-            print(f"[DEBUG] FloatingButton 实例类型: {type(fb)}")
-            print(f"[DEBUG] FloatingButton 是否可见: {fb.isVisible()}")
-            QTimer.singleShot(0, fb.toggle_panel)
-        else:
-            print("未找到FloatingButton实例")
-            print(f"[DEBUG] 当前顶层窗口: {[type(w) for w in QApplication.topLevelWidgets()]}")
-
-
-class WinHotkeyManager(QAbstractNativeEventFilter):
-    """使用Windows原生API实现的全局热键管理器"""
-    def __init__(self, main_window):
-        super().__init__()
-        self.main_window = main_window
-        self.registered = False
-        self.hotkey_id = 1  # 热键ID
-        
-    def register_hotkey(self):
-        """注册Windows原生热键"""
-        if not (sys.platform == "win32" and win32api and win32con):
-            print("Windows原生API不可用，无法注册热键")
-            return False
-            
-        try:
-            # 注册 Ctrl+Alt+Q 热键
-            if win32api.RegisterHotKey(0, self.hotkey_id, win32con.MOD_CONTROL | win32con.MOD_ALT, ord('Q')):
-                self.registered = True
-                print("✅ Windows原生热键注册成功: Ctrl+Alt+Q")
-                return True
-            else:
-                print("❌ Windows原生热键注册失败")
-                return False
-        except Exception as e:
-            print(f"❌ Windows原生热键注册异常: {e}")
-            return False
-    
-    def unregister_hotkey(self):
-        """注销Windows原生热键"""
-        if self.registered and win32api:
-            try:
-                win32api.UnregisterHotKey(0, self.hotkey_id)
-                self.registered = False
-                print("Windows原生热键已注销")
-            except Exception as e:
-                print(f"注销Windows原生热键失败: {e}")
-    
-    def nativeEventFilter(self, eventType, message):
-        """处理原生事件"""
-        if eventType == "windows_generic_MSG":
-            if message.message == win32con.WM_HOTKEY:
-                if message.wParam == self.hotkey_id:
-                    # 热键被触发，在主线程中执行切换面板操作
-                    QTimer.singleShot(0, self.main_window.toggle_panel)
-                    return True, 0
-        return False, 0
-
-
 class KeyboardHotkeyManager:
     """使用keyboard库实现的全局热键管理器（跨平台）"""
     def __init__(self, main_window):
@@ -340,13 +231,18 @@ class KeyboardHotkeyManager:
                 print(f"注销Keyboard热键失败: {e}")
     
     def _toggle_panel(self):
-        """切换面板显示状态"""
+        """切换面板显示状态（线程安全）"""
         if isinstance(self.main_window, FloatingButton):
             print(f"通过Keyboard热键调用 toggle_panel，FloatingButton实例: {self.main_window}")
-            # 在主线程中执行切换面板操作
-            QTimer.singleShot(0, self.main_window.toggle_panel)
+            # 用 Qt 的事件队列在主线程里执行
+            QMetaObject.invokeMethod(
+                self.main_window,
+                "toggle_panel",
+                Qt.QueuedConnection
+            )
         else:
             print("❌ main_window 不是 FloatingButton 实例或为 None，无法调用 toggle_panel")
+        print("[DEBUG] 热键触发 -> toggle_panel()")
 
 
 class ActionPanel(QWidget):
@@ -398,8 +294,7 @@ class ActionPanel(QWidget):
         self.setWindowFlags(
             Qt.FramelessWindowHint | 
             Qt.WindowStaysOnTopHint | 
-            Qt.Tool |
-            Qt.WindowDoesNotAcceptFocus  # 避免窗口抢夺焦点影响其他操作
+            Qt.Tool
         )
         print(f"[DEBUG] 设置窗口标志: {self.windowFlags()}")
         # 检查各个标志位
@@ -478,12 +373,18 @@ class ActionPanel(QWidget):
 
     def _restore_open_state(self):
         """根据配置恢复面板打开状态"""
-        # 只有主面板才考虑恢复打开状态
+        if getattr(self, "_restoring", False):
+            print("[DEBUG] 正在恢复，跳过重复 show()")
+            return
+        self._restoring = True
+
         if isinstance(self.parent(), FloatingButton) and self._panel_id == "main_panel":
             open_panels = CONFIG.get("open_panels", [])
             if open_panels and len(open_panels) > 0:
-                # 根据配置自动打开面板
                 QTimer.singleShot(100, self.show)
+
+        self._restoring = False
+
 
     def move(self, *args):
         """重写move方法以保存位置状态"""
@@ -1716,7 +1617,6 @@ class FloatingButton(QWidget):
         """获取当前屏幕的可用几何区域"""
         screen = QGuiApplication.screenAt(QCursor.pos()) or QGuiApplication.primaryScreen()
         geo = screen.availableGeometry()
-        print(f"[DEBUG] 屏幕几何信息: {geo}, 屏幕: {screen.name()}")
         return geo
 
     def ensure_in_screen(self):
@@ -1758,15 +1658,21 @@ class FloatingButton(QWidget):
     def show_about(self):
         QMessageBox.information(self, "关于", "这是一个悬浮按钮程序示例，样式类似 Quicker。\n作者：Your Name\n版本：1.0")
 
+
+    @Slot()
     def toggle_panel(self):
-        """切换面板显示状态（专为热键调用设计）"""
-        print("[DEBUG] 热键触发 -> toggle_panel()")
-        
+
+        # --- 新增：关闭所有子面板 ---
+        for panel in list(ActionPanel._open_panels):
+            if panel._panel_id != "main_panel":  # 保留主面板
+                panel.hide()
+                panel.deleteLater()
+                print(f"[DEBUG] 已关闭子面板: {panel._panel_id}")
+
         if self.action_panel is None:
             print("[DEBUG] 尚未创建 ActionPanel，开始初始化...")
             self.action_panel = ActionPanel(parent=self)
-        
-        # 检查面板是否可见，如果可见则隐藏，否则显示
+
         print(f"[DEBUG] 当前面板状态: 可见={self.action_panel.isVisible() if self.action_panel else 'None'}")
         if self.action_panel and self.action_panel.isVisible():
             print("[DEBUG] 面板已可见，准备隐藏")
@@ -1777,7 +1683,8 @@ class FloatingButton(QWidget):
             if self.action_panel is None:
                 print("[DEBUG] 面板实例为 None，重新创建")
                 self.action_panel = ActionPanel(parent=self)
-            
+
+            # --- 保持原来的位置计算 ---
             btn_geo = self.geometry()
             panel_size = self.action_panel.size()
             screen_geo = self.normalized_screen_geo()
@@ -1790,43 +1697,15 @@ class FloatingButton(QWidget):
 
             pos_y = max(screen_geo.top(), min(pos_y, screen_geo.bottom() - panel_size.height()))
 
-            print(f"[DEBUG] 按钮几何={btn_geo}, 面板尺寸={panel_size}, 计算位置=({pos_x},{pos_y})")
-            print(f"[DEBUG] 屏幕几何={screen_geo}")
-
             self.action_panel.move(pos_x, pos_y)
-            print(f"[DEBUG] 面板移动后位置={self.action_panel.geometry()}")
-            self.action_panel.show()
-            print(f"[DEBUG] 面板显示后状态: 可见={self.action_panel.isVisible()}")
-            
-            # 强制面板获得焦点并置顶
+            if not self.action_panel.isVisible():
+                self.action_panel.show()
+            else:
+                print("[DEBUG] 主面板已可见，跳过 show()")
+
+            # self.action_panel.show()
             self.action_panel.raise_()
             self.action_panel.activateWindow()
-            # 在某些系统上，可能需要使用不同的方法来确保窗口激活
-            if sys.platform == "win32" and win32gui and win32con:
-                try:
-                    hwnd = int(self.action_panel.winId())
-                    win32gui.SetWindowPos(
-                        hwnd, 
-                        win32con.HWND_TOPMOST, 
-                        0, 0, 0, 0,
-                        win32con.SWP_NOMOVE | win32con.SWP_NOSIZE | win32con.SWP_SHOWWINDOW
-                    )
-                    print("[DEBUG] 使用Win32 API强制置顶面板")
-                except Exception as e:
-                    print(f"[DEBUG] Win32 API置顶失败: {e}")
-            
-            print("[DEBUG] 面板已显示并置顶")
-            # 添加额外的调试信息
-            print(f"[DEBUG] 面板窗口ID: {int(self.action_panel.winId()) if self.action_panel.winId() else 'None'}")
-            # 尝试强制设置焦点
-            self.action_panel.setFocus()
-            print(f"[DEBUG] 面板是否获得焦点: {self.action_panel.hasFocus()}")
-            # 检查面板的窗口属性
-            print(f"[DEBUG] 面板窗口标志: {self.action_panel.windowFlags()}")
-            print(f"[DEBUG] 面板属性: WA_TranslucentBackground={self.action_panel.testAttribute(Qt.WA_TranslucentBackground)}")
-            # 检查窗口层级和焦点状态
-            print(f"[DEBUG] 面板是否为活动窗口: {self.action_panel.isActiveWindow()}")
-            print(f"[DEBUG] 面板是否为前台窗口: {QGuiApplication.focusWindow() == self.action_panel.windowHandle() if self.action_panel.windowHandle() else 'No window handle'}")
 
     def _restore_panel_state(self):
         """恢复面板状态"""
@@ -1909,7 +1788,6 @@ def load_config(config_dir="."):
         with open(latest_file, 'r', encoding='utf-8') as f:
             CONFIG = json.load(f)
         print(f"已加载配置文件: {latest_file}")
-        print(f"配置内容: {CONFIG}")  # 添加配置内容日志
     except (FileNotFoundError, json.JSONDecodeError) as e:
         msg = f"无法加载或解析配置文件 '{latest_file}': {e}"
         print(f"错误：{msg}")
@@ -1930,35 +1808,6 @@ if __name__ == "__main__":
         
         # 尝试使用Windows原生API注册全局热键
         hotkey_manager = None
-        try:
-            if sys.platform == "win32" and win32api and win32con:
-                hotkey_manager = WinHotkeyManager(w) # Pass the FloatingButton instance
-                if hotkey_manager.register_hotkey():
-                    app.installNativeEventFilter(hotkey_manager)
-                    # Connect unregister to application's aboutToQuit signal
-                    app.aboutToQuit.connect(hotkey_manager.unregister_hotkey)
-                    print("✅ Windows原生热键已注册")
-                else:
-                    print("❌ Windows原生热键注册失败，尝试使用Qt热键。")
-                    hotkey_manager = None
-        except Exception as e:
-            print(f"Windows热键初始化异常: {e}, 尝试使用Qt热键。")
-            hotkey_manager = None
-
-        # If Windows native hotkey is not available or failed, use Qt hotkey
-        if hotkey_manager is None:
-            try:
-                hotkey_manager = QtHotkeyManager(app)
-                if hotkey_manager.register_hotkey():
-                    print("✅ Qt热键已注册")
-                else:
-                    print("❌ Qt热键注册失败，尝试使用Keyboard全局热键。")
-                    hotkey_manager = None
-            except Exception as e:
-                print(f"Qt热键初始化异常: {e}, 尝试使用Qt热键。")
-                hotkey_manager = None
-
-        # If Qt hot键 is not available or failed, use Keyboard global hot键
         if hotkey_manager is None:
             try:
                 hotkey_manager = KeyboardHotkeyManager(w)
