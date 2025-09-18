@@ -446,10 +446,28 @@ class ActionEditDialog(QDialog):
             # 更新原始配置
             self.original_config.update(self.action_config)
             
+            # 刷新快捷键注册
+            self._refresh_hotkeys()
+            
             self.accept()
             
         except Exception as e:
             QMessageBox.warning(self, "错误", f"保存失败: {e}")
+            
+    def _refresh_hotkeys(self):
+        """刷新快捷键注册"""
+        try:
+            # 保存配置并设置标记需要刷新热键
+            from .config_manager import config_manager
+            config_manager.save_config()  
+            
+            # 尝试直接刷新热键（如果能找到主程序实例）
+            # 这里用一个简单的方式：设置一个全局标记
+            import os
+            os.environ['QUICKERING_HOTKEYS_NEED_REFRESH'] = '1'
+            print("[DEBUG] 已标记快捷键需要刷新")
+        except Exception as e:
+            print(f"刷新快捷键失败: {e}")
     
     def _edit_script_file(self):
         """编辑脚本文件"""

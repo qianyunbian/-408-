@@ -1036,6 +1036,58 @@ class ActionPanel(QWidget):
             actions.append(action_copy)
         return actions
         
+    def execute_action_by_id(self, action_id: str):
+        """通过动作ID执行动作"""
+        # 查找动作
+        action = None
+        for act in self.action_configs:
+            if act.get('id') == action_id:
+                action = act
+                break
+                
+        if not action:
+            print(f"❌ 未找到动作 ID: {action_id}")
+            return
+            
+        # 执行动作
+        action_type = action.get('type')
+        print(f"[DEBUG] 执行动作 [{action.get('name', '未命名')}] 类型: {action_type}")
+        
+        try:
+            if action_type == "key":
+                command = action.get("command", "")
+                self.simulate_key(command)
+            elif action_type == "program":
+                command = action.get("command", "")
+                self.run_program(command)
+            elif action_type == "url":
+                url = action.get("url", "")
+                self.open_url(url)
+            elif action_type == "text":
+                text = action.get("text", "")
+                self.send_text(text)
+            elif action_type == "input_output":
+                script_file = action.get("script_file", "")
+                input_source = action.get("input_source", "clipboard")
+                output_target = action.get("output_target", "text")
+                self.execute_input_output(script_file, input_source, output_target)
+            elif action_type == "quick_send":
+                filename = action.get("filename", "")
+                self.open_quick_send_panel(filename)
+            elif action_type == "panel":
+                actions = action.get("actions", [])
+                self.open_sub_panel(actions)
+            else:
+                print(f"❌ 不支持的动作类型: {action_type}")
+                
+        except Exception as e:
+            print(f"❌ 执行动作失败 [{action.get('name', '未命名')}]: {e}")
+            
+    def refresh_action_hotkeys(self):
+        """刷新动作快捷键注册（从外部调用）"""
+        # 这个方法由main.py中的QuickerApp调用
+        pass
+        
     # 动作执行方法
     def simulate_key(self, command: str):
         """模拟按键"""
@@ -1059,13 +1111,34 @@ class ActionPanel(QWidget):
         try:
             from .quick_send_panel import QuickSendPanel
             
-            # 创建快捷发送面板，传入指定的文件名
-            panel = QuickSendPanel(self, target_filename=filename)
-            panel.resize(500, 600)  # 设置默认窗口大小
-            
-            # 显示面板
-            panel.exec()
-            
+            # 检查是否已有快捷发送面板实例
+            if hasattr(self, '_quick_send_panel') and self._quick_send_panel is not None:
+                # 如果面板存在且可见，则隐藏
+                if self._quick_send_panel.isVisible():
+                    self._quick_send_panel.hide()
+                    print("[DEBUG] 隐藏快捷发送面板")
+                else:
+                    # 如果面板存在但不可见，则显示
+                    self._quick_send_panel.show()
+                    self._quick_send_panel.raise_()
+                    self._quick_send_panel.activateWindow()
+                    print("[DEBUG] 显示快捷发送面板")
+            else:
+                # 创建新的面板实例
+                self._quick_send_panel = QuickSendPanel(self, target_filename=filename)
+                self._quick_send_panel.resize(500, 600)  # 设置默认窗口大小
+                
+                # 连接关闭信号，当面板关闭时清空引用
+                def on_panel_finished():
+                    self._quick_send_panel = None
+                    print("[DEBUG] 快捷发送面板已关闭")
+                
+                self._quick_send_panel.finished.connect(on_panel_finished)
+                
+                # 使用show()而不是exec()来避免模态对话框
+                self._quick_send_panel.show()
+                print("[DEBUG] 创建并显示快捷发送面板")
+                
         except Exception as e:
             print(f"打开快捷发送面板失败: {e}")
             from PySide6.QtWidgets import QMessageBox

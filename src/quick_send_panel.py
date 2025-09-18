@@ -12,8 +12,65 @@ from PySide6.QtWidgets import (
     QMenu, QInputDialog, QApplication
 )
 from PySide6.QtCore import Qt, QTimer, Signal
-from PySide6.QtGui import QAction
+from PySide6.QtGui import QAction, QPainter, QFontMetrics
 from .config_manager import config_manager
+
+
+class ElidedLabel(QLabel):
+    """支持文本省略显示的QLabel"""
+    
+    def __init__(self, text="", parent=None):
+        super().__init__(text, parent)
+        self._full_text = text
+        # 使用Qt内置的文本省略功能
+        self.setWordWrap(False)
+        
+    def setText(self, text: str):
+        self._full_text = text
+        # 直接设置文本，让Qt处理省略
+        super().setText(text)
+        
+    def text(self) -> str:
+        """返回完整文本，而不是显示的省略文本"""
+        return self._full_text
+        
+    def resizeEvent(self, event):
+        """窗口大小改变时重新计算文本显示"""
+        super().resizeEvent(event)
+        self._update_elided_text()
+        
+    def _update_elided_text(self):
+        """更新省略文本显示"""
+        if not self._full_text:
+            return
+            
+        font_metrics = QFontMetrics(self.font())
+        available_width = self.width() - 16  # 减去内边距
+        
+        if available_width > 0 and font_metrics.horizontalAdvance(self._full_text) > available_width:
+            elided_text = font_metrics.elidedText(
+                self._full_text, 
+                Qt.TextElideMode.ElideRight, 
+                available_width
+            )
+            # 使用父类方法设置显示文本
+            super().setText(elided_text)
+        else:
+            super().setText(self._full_text)
+        
+    def get_full_text(self) -> str:
+        """获取完整文本"""
+        return self._full_text
+        
+    def is_text_elided(self) -> bool:
+        """检查文本是否被省略"""
+        if not self._full_text:
+            return False
+        font_metrics = QFontMetrics(self.font())
+        available_width = self.width() - 16
+        # 确保有有效的宽度
+        return (available_width > 0 and 
+                font_metrics.horizontalAdvance(self._full_text) > available_width)
 
 
 class DraggableListWidget(QListWidget):
@@ -59,9 +116,9 @@ class SendButtonWidget(QWidget):
         layout.setSpacing(10)
         
         # 左侧文本显示区域
-        self.text_label = QLabel(self.item_data.get("key", ""))
+        self.text_label = ElidedLabel(self.item_data.get("key", ""))
         self.text_label.setStyleSheet("""
-            QLabel {
+            ElidedLabel {
                 background-color: transparent;
                 border: none;
                 padding: 6px 8px;
@@ -69,12 +126,29 @@ class SendButtonWidget(QWidget):
                 color: #333;
                 border-radius: 4px;
             }
-            QLabel:hover {
-                background-color: #e9ecef;
+            ElidedLabel:hover {
+                background-color: #e3f2fd;
+                color: #1976d2;
+                border: 1px solid #bbdefb;
             }
         """)
+        # 通过Qt方法设置鼠标光标
+        self.text_label.setCursor(Qt.CursorShape.PointingHandCursor)
         self.text_label.setMinimumHeight(30)
         self.text_label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        
+        # 根据文本内容动态调整标签宽度
+        text_content = self.item_data.get("key", "")
+        # 设置最大和最小宽度限制，让文本标签能够响应式调整
+        min_width = 80   # 设置最小宽度
+        max_width = 300  # 设置最大宽度限制
+        
+        self.text_label.setMinimumWidth(min_width)
+        # 不设置最大宽度限制，让它能够充分利用可用空间
+        # self.text_label.setMaximumWidth(max_width)
+        # 设置尺寸策略为Expanding，允许在可用空间内自由伸缩
+        from PySide6.QtWidgets import QSizePolicy
+        self.text_label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         
         # 文本编辑框（默认隐藏）
         self.text_edit = QLineEdit()
@@ -88,17 +162,25 @@ class SendButtonWidget(QWidget):
             }
         """)
         self.text_edit.setMinimumHeight(30)
+        self.text_edit.setMinimumWidth(min_width)
+        # 设置编辑框也使用相同的尺寸策略
+        self.text_edit.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.text_edit.hide()  # 默认隐藏
         self.text_edit.editingFinished.connect(self._finish_editing)
         
         # 将文本显示和编辑框放在同一位置
         text_container = QWidget()
+        # 设置容器的尺寸策略，允许它伸缩
+        text_container.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         text_layout = QVBoxLayout(text_container)
         text_layout.setContentsMargins(0, 0, 0, 0)
         text_layout.addWidget(self.text_label)
         text_layout.addWidget(self.text_edit)
         
-        layout.addWidget(text_container, 1)  # 伸缩填充
+        # 使用适中的伸缩因子，确保发送按钮可见
+        layout.addWidget(text_container, 1)  # 降低伸缩因子
+        
+        # 不需要addStretch，直接让发送按钮在右侧
         
         # 右侧小按钮
         button_text = self.item_data.get("text", "发送")
@@ -140,14 +222,16 @@ class SendButtonWidget(QWidget):
             }
         """)
         
-    def mouseDoubleClickEvent(self, event):
-        """双击事件 - 进入编辑模式"""
+    def mousePressEvent(self, event):
+        """鼠标点击事件 - 单击左键发送文本"""
         if event.button() == Qt.MouseButton.LeftButton:
             # 检查点击位置是否在文本区域
             text_pos = self.text_label.mapFromParent(event.pos())
             if self.text_label.rect().contains(text_pos):
-                self._start_editing()
-        super().mouseDoubleClickEvent(event)
+                # 单击文本区域直接发送
+                key_value = self.item_data.get("key", "")
+                self.send_requested.emit(key_value)
+        super().mousePressEvent(event)
         
     def _start_editing(self):
         """开始编辑模式"""
@@ -206,19 +290,104 @@ class SendButtonWidget(QWidget):
         
         menu.exec(event.globalPos())
         
+    def resizeEvent(self, event):
+        """窗口大小改变时通知文本标签更新"""
+        super().resizeEvent(event)
+        # 强制更新文本标签的显示
+        if hasattr(self, 'text_label'):
+            self.text_label._update_elided_text()
+        
     def enterEvent(self, event):
         super().enterEvent(event)
-        if self.item_data.get("tooltip"):
-            self.hover_timer.start(1000)
+        # 检查是否需要显示tooltip
+        key_text = self.item_data.get("key", "")
+        if key_text:
+            # 如果文本长度大于50个字符，立即显示tooltip
+            if len(key_text) > 50:
+                self._show_tooltip()
+            # 否则检查文本是否被省略或有自定义tooltip，延迟显示
+            elif self.text_label.is_text_elided() or self.item_data.get("tooltip"):
+                self.hover_timer.start(1000)
         
     def leaveEvent(self, event):
         super().leaveEvent(event)
         self.hover_timer.stop()
         
     def _show_tooltip(self):
+        key_text = self.item_data.get("key", "")
         tooltip_text = self.item_data.get("tooltip", "")
+        
+        # 优先显示自定义tooltip
         if tooltip_text:
-            self.setToolTip(tooltip_text)
+            formatted_tooltip = self._format_tooltip(tooltip_text)
+            self.setToolTip(formatted_tooltip)
+        elif key_text:
+            # 如果文本长度大于50个字符，格式化显示（每100字符换行）
+            if len(key_text) > 50:
+                formatted_text = self._format_long_text(key_text, 100)
+                formatted_tooltip = self._format_tooltip(formatted_text, is_long_text=True)
+                self.setToolTip(formatted_tooltip)
+            # 否则检查文本是否被省略，显示完整文本
+            elif self.text_label.is_text_elided():
+                formatted_tooltip = self._format_tooltip(key_text)
+                self.setToolTip(formatted_tooltip)
+                
+    def _format_tooltip(self, text: str, is_long_text: bool = False) -> str:
+        """格式化tooltip文本，添加美化样式"""
+        # 为tooltip添加HTML样式
+        if is_long_text:
+            return f'''<div style="
+                background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1, 
+                    stop: 0 #f8f9fa, stop: 1 #e9ecef);
+                color: #495057;
+                border: 1px solid #007bff;
+                border-radius: 8px;
+                padding: 12px 16px;
+                font-family: 'Microsoft YaHei', 'Segoe UI', sans-serif;
+                font-size: 13px;
+                line-height: 1.4;
+                max-width: 600px;
+                box-shadow: 0 4px 12px rgba(0, 123, 255, 0.15);
+                word-wrap: break-word;
+            ">
+                {text.replace(chr(10), '<br>')}
+            </div>'''
+        else:
+            return f'''<div style="
+                background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1, 
+                    stop: 0 #ffffff, stop: 1 #f8f9fa);
+                color: #495057;
+                border: 1px solid #ced4da;
+                border-radius: 6px;
+                padding: 8px 12px;
+                font-family: 'Microsoft YaHei', 'Segoe UI', sans-serif;
+                font-size: 12px;
+                line-height: 1.3;
+                max-width: 400px;
+                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+                word-wrap: break-word;
+            ">
+                {text.replace(chr(10), '<br>')}
+            </div>'''
+                
+    def _format_long_text(self, text: str, line_length: int = 100) -> str:
+        """将长文本按指定长度换行格式化"""
+        if len(text) <= line_length:
+            return text
+            
+        lines = []
+        start = 0
+        while start < len(text):
+            end = start + line_length
+            if end >= len(text):
+                lines.append(text[start:])
+                break
+            else:
+                # 直接按字符长度换行
+                lines.append(text[start:end])
+                start = end
+                
+        return '\n'.join(lines)
             
     def update_button_text(self, new_text: str):
         self.send_button.setText(new_text)
@@ -243,6 +412,9 @@ class QuickSendPanel(QDialog):
         self.current_data: List[Dict[str, Any]] = []
         self.all_data: Dict[str, List[Dict[str, Any]]] = {}
         self.filtered_data: List[Dict[str, Any]] = []
+        
+        # 在面板创建时先获取当前前台窗口，确保记录的是真正的目标窗口
+        self._store_current_foreground_window()
         
         # 设置窗口标题
         if target_filename:
@@ -451,39 +623,38 @@ class QuickSendPanel(QDialog):
             clipboard = QApplication.clipboard()
             clipboard.setText(text)
             
-            # 使用与发送文本动作相同的机制发送到上一个活动窗口
-            self._send_to_previous_window(text)
+            # 直接粘贴到上一个活动窗口
+            self._paste_to_previous_window()
             
-            print(f"已发送文本: {text}")
+            print(f"已粘贴文本: {text}")
             
         except Exception as e:
             QMessageBox.warning(self, "发送失败", f"发送文本失败: {e}")
             
-    def _send_to_previous_window(self, text: str):
-        """使用与发送文本动作相同的机制发送文本"""
+    def _paste_to_previous_window(self):
+        """切换到上一个窗口并执行粘贴"""
         # 隐藏面板并切换到上一个窗口
         self.hide()
-        QTimer.singleShot(100, lambda: self._switch_and_send_text(text))
+        QTimer.singleShot(100, lambda: self._switch_and_paste())
         
-    def _switch_and_send_text(self, text: str):
-        """切换窗口并发送文本"""
+    def _switch_and_paste(self):
+        """切换窗口并执行粘贴"""
         if self._switch_to_previous_window():
-            QTimer.singleShot(200, lambda: self._execute_send_text(text))
+            QTimer.singleShot(200, lambda: self._execute_paste())
         else:
-            self._execute_send_text(text)
+            self._execute_paste()
             
-    def _execute_send_text(self, text: str):
-        """执行发送文本"""
+    def _execute_paste(self):
+        """执行粘贴操作"""
         try:
             import pyautogui
-            pyautogui.write(text)
+            # 使用Ctrl+V进行粘贴
+            pyautogui.hotkey('ctrl', 'v')
         except ImportError:
-            print("无法发送到活动窗口，仅复制到剪贴板")
+            print("无法执行粘贴操作，仅复制到剪贴板")
         except Exception as e:
-            print(f"发送文本失败: {e}")
-        finally:
-            # 显示面板
-            self.show()
+            print(f"粘贴失败: {e}")
+        # 注意：不要在这里重新显示面板，保持目标窗口的焦点
             
     def _switch_to_previous_window(self) -> bool:
         """切换到上一个活动窗口"""
@@ -526,6 +697,51 @@ class QuickSendPanel(QDialog):
             # 如果父级是ActionPanel，继续向上查找
             parent = parent.parent()
         return None
+        
+    def _store_current_foreground_window(self):
+        """在面板创建时存储当前的前台窗口"""
+        import sys
+        if sys.platform == "win32":
+            try:
+                import win32gui
+                hwnd = win32gui.GetForegroundWindow()
+                
+                # 检查是否是外部窗口（非应用内的对话框）
+                window_title = win32gui.GetWindowText(hwnd)
+                app_dialog_titles = [
+                    "快捷发送面板",
+                    "数据面板",
+                    "编辑动作",
+                    "新增动作",
+                    "输入输出动作",
+                    "脚本编辑器",
+                    "图标选择",
+                    "Quicker",
+                    "关于"
+                ]
+                
+                is_app_dialog = any(title in window_title for title in app_dialog_titles)
+                
+                if (win32gui.IsWindowVisible(hwnd) and 
+                    window_title != "" and
+                    not is_app_dialog):
+                    # 直接设置浮动按钮的last_foreground_window
+                    floating_button = self._get_floating_button()
+                    if floating_button:
+                        setattr(floating_button, 'last_foreground_window', hwnd)
+                        print(f"[DEBUG] 在快捷发送面板创建时记录前台窗口: {window_title} (hwnd: {hwnd})")
+                        
+            except Exception as e:
+                print(f"存储前台窗口失败: {e}")
+        
+    def _update_floating_button_last_window(self):
+        """更新浮动按钮的前台窗口记录"""
+        floating_button = self._get_floating_button()
+        if floating_button:
+            # 使用getattr安全调用方法
+            update_method = getattr(floating_button, 'update_last_foreground_window', None)
+            if update_method and callable(update_method):
+                update_method()
             
     def _on_item_moved(self, from_index: int, to_index: int):
         if 0 <= from_index < len(self.filtered_data) and 0 <= to_index < len(self.filtered_data):

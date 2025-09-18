@@ -112,7 +112,11 @@ class FloatingButton(QWidget):
     def setup_tray(self):
         """设置系统托盘"""
         self.tray = QSystemTrayIcon(self)
-        self.tray.setIcon(QIcon.fromTheme("applications-system"))
+        # 使用项目内的SVG图标而不是系统主题图标，避免libpng警告
+        from .icon_manager import icon_manager
+        tray_icon = icon_manager.get_icon("grid")
+        if not tray_icon.isNull():
+            self.tray.setIcon(tray_icon)
         self.tray.setToolTip("Floating Quick Button")
         self.tray.setContextMenu(self.menu)
         self.tray.show()
@@ -190,11 +194,30 @@ class FloatingButton(QWidget):
                 exclude_hwnds = [int(self.winId())]
                 if self.action_panel:
                     exclude_hwnds.append(int(self.action_panel.winId()))
-                    
+                
+                # 排除所有的应用内对话框（根据窗口标题判断）
+                window_title = win32gui.GetWindowText(hwnd)
+                app_dialog_titles = [
+                    "快捷发送面板",
+                    "数据面板",
+                    "编辑动作",
+                    "新增动作",
+                    "输入输出动作",
+                    "脚本编辑器",
+                    "图标选择",
+                    "Quicker",
+                    "关于"
+                ]
+                
+                # 检查是否是应用内的对话框
+                is_app_dialog = any(title in window_title for title in app_dialog_titles)
+                
                 if (hwnd not in exclude_hwnds and 
                     win32gui.IsWindowVisible(hwnd) and 
-                    win32gui.GetWindowText(hwnd) != ""):
+                    window_title != "" and
+                    not is_app_dialog):
                     self.last_foreground_window = hwnd
+                    # print(f"[DEBUG] 更新前台窗口: {window_title} (hwnd: {hwnd})")
             except Exception:
                 pass
                 

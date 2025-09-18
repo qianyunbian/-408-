@@ -1,5 +1,6 @@
 import sys
 import os
+import sys
 from pathlib import Path
 from typing import Optional, TYPE_CHECKING, Any
 
@@ -13,11 +14,31 @@ sys.path.insert(0, str(src_path))
 
 try:
     from PySide6.QtWidgets import QApplication, QMessageBox
-    from PySide6.QtCore import Qt, QTimer
+    from PySide6.QtCore import Qt, QTimer, qInstallMessageHandler, QtMsgType
     from PySide6.QtGui import QIcon
 except ImportError:
     print("错误：无法导入PySide6库。请安装：pip install PySide6")
     sys.exit(1)
+
+# 设置消息处理器，过滤libpng警告
+def qt_message_handler(mode, context, message):
+    """自定义Qt消息处理器，过滤不必要的libpng警告"""
+    # 过滤libpng的sRGB配置文件警告
+    if "libpng warning" in message and "iCCP" in message:
+        return
+    # 过滤其他不重要的Qt警告
+    if "SetProcessDpiAwarenessContext" in message:
+        return
+    # 其他消息正常输出
+    if mode == QtMsgType.QtWarningMsg:
+        print(f"警告: {message}")
+    elif mode == QtMsgType.QtCriticalMsg:
+        print(f"错误: {message}")
+    elif mode == QtMsgType.QtFatalMsg:
+        print(f"致命错误: {message}")
+
+# 安装消息处理器
+qInstallMessageHandler(qt_message_handler)
 
 # 导入应用模块
 from src.config_manager import config_manager
@@ -63,7 +84,16 @@ class QuickerApp:
             
             self.hotkey_manager = HotkeyManager(self.floating_button)
             hotkey = config_manager.get("hotkeys.toggle_panel", "ctrl+alt+q")
-            return self.hotkey_manager.register_hotkey(hotkey)
+            
+            # 注册全局热键
+            success = self.hotkey_manager.register_hotkey(hotkey)
+            
+            # 注册动作快捷键
+            if success:
+                actions = config_manager.get("actions", [])
+                self.hotkey_manager.register_action_hotkeys(actions)
+            
+            return success
             
         except ImportError as e:
             print(f"热键管理器模块导入失败: {e}")
@@ -73,6 +103,30 @@ class QuickerApp:
         except Exception as e:
             print(f"热键管理器初始化失败: {e}")
             return False
+            
+    def refresh_action_hotkeys(self):
+        """刷新动作快捷键注册"""
+        if self.hotkey_manager and self.hotkey_manager.registered:
+            try:
+                actions = config_manager.get("actions", [])
+                self.hotkey_manager.register_action_hotkeys(actions)
+            except Exception as e:
+                print(f"刷新动作快捷键失败: {e}")
+                
+    def _setup_hotkey_refresh_timer(self):
+        """设置定时器检查热键更新"""
+        from PySide6.QtCore import QTimer
+        self.hotkey_refresh_timer = QTimer()
+        self.hotkey_refresh_timer.timeout.connect(self._check_hotkey_refresh)
+        self.hotkey_refresh_timer.start(1000)  # 每秒1检查一次
+        
+    def _check_hotkey_refresh(self):
+        """检查是否需要刷新热键"""
+        import os
+        if os.environ.get('QUICKERING_HOTKEYS_NEED_REFRESH') == '1':
+            print("[DEBUG] 检测到热键更新请求，正在刷新...")
+            self.refresh_action_hotkeys()
+            os.environ['QUICKERING_HOTKEYS_NEED_REFRESH'] = '0'  # 清除标记
             
     def check_dependencies(self) -> bool:
         """检查依赖"""
@@ -167,6 +221,9 @@ class QuickerApp:
             # 初始化热键管理器
             print("初始化热键管理器...")
             self.init_hotkey_manager()
+            
+            # 设置定时器检查热键更新
+            self._setup_hotkey_refresh_timer()
             
             print("\\n✅ Quicker启动成功！")
             print("💡 使用提示：")

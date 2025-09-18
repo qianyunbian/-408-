@@ -41,7 +41,7 @@
       "name": "计算器",
       "type": "program",
       "icon_path": "计算机 算数",
-      "hotkey": "",
+      "hotkey": "ctrl+alt+j",
       "command": "calc.exe",
       "enabled": true,
       "created_at": "2024-01-01T00:00:00"
@@ -51,7 +51,7 @@
       "name": "搜索",
       "type": "url",
       "icon_path": "search",
-      "hotkey": "",
+      "hotkey": "ctrl+alt+i",
       "url": "https://www.google.com",
       "enabled": true,
       "created_at": "2024-01-01T00:00:00"
@@ -257,7 +257,7 @@
       "name": "99",
       "type": "quick_send",
       "icon_path": "",
-      "hotkey": "",
+      "hotkey": "ctrl+alt+r",
       "created_at": "2025-09-16T23:20:52.650561",
       "enabled": true,
       "filename": "1254",
