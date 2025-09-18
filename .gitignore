@@ -76,3 +76,12 @@ Thumbs.db
 *.log
 *.tmp
 temp/
+
+# 隐私和用户数据目录（包含敏感配置信息）
+config_backups/
+quick_send/
+input_output_actions/
+data_panels/
+
+# 用户配置文件（可能包含敏感信息）
+config.json
